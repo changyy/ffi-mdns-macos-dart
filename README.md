@@ -232,7 +232,7 @@ dart pub get
 
 4. Run examples:
 ```bash
-dart run example/basic_usage_example.dart
+dart run example/native_mdns_scanner_example.dart
 dart run example/timing_test_example.dart
 ```
 
@@ -241,23 +241,23 @@ dart run example/timing_test_example.dart
 ```
 ffi-mdns-macos-dart/
 ├── lib/
-│   ├── native_mdns_scanner.dart   # Main export
+│   ├── native_mdns_scanner.dart           # Main export
 │   └── src/
-│       ├── mdns_bindings.dart     # FFI bindings
-│       ├── device_info.dart       # Device model
-│       └── timing_analyzer.dart   # Timing utilities
+│       ├── mdns_bindings.dart             # FFI bindings
+│       ├── device_info.dart               # Device model
+│       └── timing_analyzer.dart           # Timing utilities
 ├── native/
-│   ├── mdns_ffi.h                 # C header
-│   ├── mdns_ffi.m                 # Objective-C implementation
-│   ├── build.sh                   # Build script
-│   └── libmdns_ffi.dylib          # Compiled library
+│   ├── mdns_ffi.h                         # C header
+│   ├── mdns_ffi.m                         # Objective-C implementation
+│   ├── build.sh                           # Build script
+│   └── libmdns_ffi.dylib                  # Compiled library
 ├── example/
-│   ├── basic_usage_example.dart   # Basic usage example
-│   └── timing_test_example.dart   # Timing analysis example
+│   ├── native_mdns_scanner_example.dart   # Basic usage example
+│   └── timing_test_example.dart           # Timing analysis example
 ├── bin/
-│   └── mdns_cli.dart              # CLI tool
+│   └── mdns_cli.dart                      # CLI tool
 └── test/
-    └── mdns_test.dart             # Unit tests
+    └── mdns_test.dart                     # Unit tests
 ```
 
 ## Performance Notes
