@@ -232,8 +232,8 @@ dart pub get
 
 4. Run examples:
 ```bash
-dart run example/basic_usage.dart
-dart run example/timing_test.dart
+dart run example/basic_usage_example.dart
+dart run example/timing_test_example.dart
 ```
 
 ### Project Structure
@@ -252,8 +252,8 @@ ffi-mdns-macos-dart/
 │   ├── build.sh                   # Build script
 │   └── libmdns_ffi.dylib          # Compiled library
 ├── example/
-│   ├── basic_usage.dart           # Basic usage example
-│   └── timing_test.dart           # Timing analysis example
+│   ├── basic_usage_example.dart   # Basic usage example
+│   └── timing_test_example.dart   # Timing analysis example
 ├── bin/
 │   └── mdns_cli.dart              # CLI tool
 └── test/
