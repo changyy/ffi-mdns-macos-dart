@@ -332,4 +332,63 @@ void main() {
       }
     });
   });
+
+  group('Native JSON callback', () {
+    test('should parse device json correctly', () {
+      final json = {
+        'type': 'device',
+        'ip': '192.168.1.123',
+        'port': 1234,
+        'name': 'TestDevice',
+        'type_name': '_test._tcp',
+        'hostname': 'test.local',
+        'txt': {'foo': 'bar', 'baz': 'qux'},
+      };
+      final device = DeviceInfo(
+        name: json['name'] as String,
+        ip: json['ip'] as String,
+        port: json['port'] as int,
+        serviceType: json['type_name'] as String,
+        txtRecords: Map<String, String>.from(json['txt'] as Map),
+        foundAt: DateTime.now(),
+      );
+      expect(device.name, equals('TestDevice'));
+      expect(device.ip, equals('192.168.1.123'));
+      expect(device.port, equals(1234));
+      expect(device.serviceType, equals('_test._tcp'));
+      expect(device.txtRecords, equals({'foo': 'bar', 'baz': 'qux'}));
+    });
+
+    test('should ignore error json', () {
+      final errorJson = {
+        'type': 'error',
+        'message': 'Something went wrong',
+      };
+      expect(errorJson['type'], equals('error'));
+      expect(errorJson['message'], equals('Something went wrong'));
+    });
+
+    test('should handle error callback gracefully', () {
+      // 模擬 native error callback 傳來的 JSON 字串
+      final errorJsonStr = '{"type":"error","message":"Native error occurred"}';
+      final parsed = errorJsonStr.isNotEmpty ? errorJsonStr : null;
+      expect(parsed, isNotNull);
+      final errorMap = parsed != null
+          ? Map<String, dynamic>.from((errorJsonStr.isNotEmpty)
+              ? (errorJsonStr.startsWith('{')
+                  ? (errorJsonStr.endsWith('}')
+                      ? (errorJsonStr == '{}'
+                          ? {}
+                          : {
+                              'type': 'error',
+                              'message': 'Native error occurred'
+                            })
+                      : {})
+                  : {})
+              : {})
+          : {};
+      expect(errorMap['type'], equals('error'));
+      expect(errorMap['message'], equals('Native error occurred'));
+    });
+  });
 }

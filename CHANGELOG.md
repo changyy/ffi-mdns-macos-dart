@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-05-23
+
+### Changed
+- **Native callback now uses JSON string**: All device and error information is returned as a single JSON string from native code, enabling richer and more extensible data exchange.
+- **Debug mode with multiple levels**: Both native and Dart layers now support debug levels (0=quiet, 1=error/result, 2=normal, 3=verbose). CLI and examples allow fine-grained debug control via `--debug[=<level>]`.
+- **Dart FFI bindings updated**: All FFI bindings and callback signatures updated to support JSON callback, with correct type safety and error handling.
+- **CLI tool (`mdns_cli.dart`)**: All scan commands now use the new JSON callback interface. Debug option is fully documented and supports levels. Usage/help is now fully in English.
+- **Examples and tests updated**: All example and test files now use the JSON callback interface and support debug level control. All comments and output are in English.
+- **Error reporting improved**: Native and Dart errors are now reported in a unified JSON format, and CLI displays them clearly.
+- **Resource management**: Improved cleanup and disposal logic in FFI and CLI.
+
+### Fixed
+- Fixed type errors in FFI and CLI caused by debug parameter type changes (now always `int`).
+- Fixed class/method structure issues in FFI binding layer.
+- Fixed example/test code to match new API and debug conventions.
+
+### Added
+- Support for debug level 0 (quiet mode): only final device results are shown by default.
+- CLI and API now allow setting debug level from 0 to 3 for granular control.
+- All output, comments, and documentation are now in English for international use.
+
 ## [1.0.2] - 2025-05-23
 
 ### Fixed

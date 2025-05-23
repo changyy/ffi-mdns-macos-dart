@@ -22,8 +22,12 @@ typedef struct {
 // 改用字典來管理多個搜尋上下文
 static NSMutableDictionary *searchContexts = nil;
 static DeviceFoundCallback globalCallback = NULL;
+static DeviceFoundJsonCallback globalJsonCallback = NULL;
 static NSTimer *runLoopTimer = nil;
 static int totalActiveSearches = 0;
+
+// 新增 debug mode 全域變數
+static int globalDebugMode = 0;
 
 @interface MdnsDelegate : NSObject <NSNetServiceBrowserDelegate, NSNetServiceDelegate>
 @property (nonatomic, strong) NSString *serviceType;
@@ -116,15 +120,13 @@ static int totalActiveSearches = 0;
 #pragma mark - NSNetServiceDelegate
 
 - (void)netServiceDidResolveAddress:(NSNetService *)service {
-    NSLog(@"✅ Successfully resolved service: %@ (type: %@)", service.name, service.type);
+    if (globalDebugMode) NSLog(@"✅ Successfully resolved service: %@ (type: %@)", service.name, service.type);
     
     NSString *ip = nil;
     int port = (int)service.port;
-    
     for (NSUInteger i = 0; i < service.addresses.count; i++) {
         NSData *addrData = service.addresses[i];
         struct sockaddr *addr = (struct sockaddr *)[addrData bytes];
-        
         if (addr->sa_family == AF_INET) {
             struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr;
             char ipStr[INET_ADDRSTRLEN];
@@ -134,42 +136,54 @@ static int totalActiveSearches = 0;
         }
     }
     
-    NSString *name = service.name ?: @"";
-    NSString *txt = @"";
-    NSString *serviceTypeForCallback = service.type ?: @"";
-    
+    NSMutableDictionary *dict = [NSMutableDictionary dictionary];
+    dict[@"type"] = @"device";
+    dict[@"ip"] = ip ?: @"";
+    dict[@"port"] = @(port);
+    dict[@"name"] = service.name ?: @"";
+    dict[@"type_name"] = service.type ?: @"";
+    dict[@"hostname"] = service.hostName ?: @"";
+    // interfaceIndex 與 flags 僅 iOS 支援，macOS 不支援，已移除
+    // 收集 TXT record
     if (service.TXTRecordData) {
         NSDictionary *txtDict = [NSNetService dictionaryFromTXTRecordData:service.TXTRecordData];
-        NSMutableArray *txtPairs = [NSMutableArray array];
+        NSMutableDictionary *txtDecoded = [NSMutableDictionary dictionary];
         for (NSString *key in txtDict) {
             NSData *valueData = txtDict[key];
             NSString *val = @"";
             if (valueData && valueData.length > 0) {
                 val = [[NSString alloc] initWithData:valueData encoding:NSUTF8StringEncoding] ?: @"";
             }
-            [txtPairs addObject:[NSString stringWithFormat:@"%@=%@", key, val]];
+            txtDecoded[key] = val;
         }
-        txt = [txtPairs componentsJoinedByString:@","];
+        dict[@"txt"] = txtDecoded;
     }
-    
-    // 將服務類型和查詢次數加入 TXT 記錄
-    if (txt.length > 0) {
-        txt = [NSString stringWithFormat:@"service_type=%@,query_num=%d,%@", 
-               serviceTypeForCallback, self.queriesSent, txt];
-    } else {
-        txt = [NSString stringWithFormat:@"service_type=%@,query_num=%d", 
-               serviceTypeForCallback, self.queriesSent];
-    }
-    
-    if (globalCallback && ip) {
-        NSLog(@"📞 Calling callback for %@ (found via query #%d)", name, self.queriesSent);
-        globalCallback([ip UTF8String], port, [name UTF8String], [txt UTF8String]);
+    // 其他可用屬性可依需求擴充
+    NSError *error = nil;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:dict options:0 error:&error];
+    if (!error && globalJsonCallback && ip) {
+        NSString *jsonStr = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+        globalJsonCallback([jsonStr UTF8String]);
+    } else if (error) {
+        if (globalDebugMode) NSLog(@"❌ JSON encode error: %@", error);
+        if (globalJsonCallback) {
+            NSDictionary *errDict = @{@"type": @"error", @"message": error.localizedDescription ?: @"JSON encode error"};
+            NSData *errData = [NSJSONSerialization dataWithJSONObject:errDict options:0 error:nil];
+            NSString *errStr = [[NSString alloc] initWithData:errData encoding:NSUTF8StringEncoding];
+            globalJsonCallback([errStr UTF8String]);
+        }
     }
 }
 
 - (void)netService:(NSNetService *)sender 
       didNotResolve:(NSDictionary<NSString *,NSNumber *> *)errorDict {
-    NSLog(@"❌ Failed to resolve service %@: %@", sender.name, errorDict);
+    if (globalDebugMode) NSLog(@"❌ Failed to resolve service %@: %@", sender.name, errorDict);
+    if (globalJsonCallback) {
+        NSDictionary *errDict = @{@"type": @"error", @"message": [NSString stringWithFormat:@"Failed to resolve service %@: %@", sender.name, errorDict]};
+        NSData *errData = [NSJSONSerialization dataWithJSONObject:errDict options:0 error:nil];
+        NSString *errStr = [[NSString alloc] initWithData:errData encoding:NSUTF8StringEncoding];
+        globalJsonCallback([errStr UTF8String]);
+    }
 }
 
 @end
@@ -323,6 +337,59 @@ void start_mdns_periodic_scan(const char* service_type,
 void start_mdns_scan(const char* service_type, DeviceFoundCallback cb) {
     // 使用預設值：不定期查詢，無時間限制
     start_mdns_periodic_scan(service_type, 0, 0, cb);
+}
+
+// 新的週期性搜尋函數 (JSON)
+void start_mdns_periodic_scan_json(const char* service_type, int query_interval_ms, int total_duration_ms, DeviceFoundJsonCallback cb, int debug_mode) {
+    NSString *serviceTypeStr = [NSString stringWithUTF8String:service_type];
+    if (!searchContexts) {
+        searchContexts = [[NSMutableDictionary alloc] init];
+    }
+    if (searchContexts[serviceTypeStr]) {
+        if (debug_mode) NSLog(@"⏸️ Already scanning for service type: %s", service_type);
+        if (cb) {
+            NSDictionary *errDict = @{@"type": @"error", @"message": @"Already scanning for this service type"};
+            NSData *errData = [NSJSONSerialization dataWithJSONObject:errDict options:0 error:nil];
+            NSString *errStr = [[NSString alloc] initWithData:errData encoding:NSUTF8StringEncoding];
+            cb([errStr UTF8String]);
+        }
+        return;
+    }
+    globalJsonCallback = cb;
+    globalDebugMode = debug_mode;
+    SearchContext *context = malloc(sizeof(SearchContext));
+    context->serviceType = serviceTypeStr;
+    context->services = [[NSMutableArray alloc] init];
+    context->delegate = [[MdnsDelegate alloc] initWithServiceType:serviceTypeStr];
+    context->browser = [[NSNetServiceBrowser alloc] init];
+    context->browser.delegate = context->delegate;
+    context->queryIntervalMs = query_interval_ms;
+    context->totalDurationMs = total_duration_ms;
+    context->queriesSent = 0;
+    searchContexts[serviceTypeStr] = [NSValue valueWithPointer:context];
+    totalActiveSearches++;
+    if (debug_mode) NSLog(@"🎬 Starting initial search for: %@", serviceTypeStr);
+    startRunLoopProcessing();
+    [context->browser searchForServicesOfType:serviceTypeStr inDomain:@"local."];
+    if (query_interval_ms > 0) {
+        double intervalSeconds = query_interval_ms / 1000.0;
+        context->queryTimer = [NSTimer scheduledTimerWithTimeInterval:intervalSeconds repeats:YES block:^(NSTimer * _Nonnull timer) {
+            periodicQueryCallback(context);
+        }];
+        if (debug_mode) NSLog(@"⏰ Set up periodic query timer: every %.1fs", intervalSeconds);
+    }
+    if (total_duration_ms > 0) {
+        double durationSeconds = total_duration_ms / 1000.0;
+        context->durationTimer = [NSTimer scheduledTimerWithTimeInterval:durationSeconds repeats:NO block:^(NSTimer * _Nonnull timer) {
+            searchDurationCallback(context);
+        }];
+        if (debug_mode) NSLog(@"⏰ Set up duration timer: %.1fs total", durationSeconds);
+    }
+    if (debug_mode) NSLog(@"✅ Periodic search setup complete for: %@", serviceTypeStr);
+}
+
+void start_mdns_scan_json(const char* service_type, DeviceFoundJsonCallback cb, int debug_mode) {
+    start_mdns_periodic_scan_json(service_type, 0, 0, cb, debug_mode);
 }
 
 void stop_mdns_scan() {

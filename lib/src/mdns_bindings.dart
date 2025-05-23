@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:async';
 import 'package:ffi/ffi.dart';
+import 'dart:convert';
 
 import 'device_info.dart';
 
@@ -53,6 +54,36 @@ typedef IsMdnsScanningDart = int Function();
 typedef GetFoundServicesCountNative = Int32 Function();
 typedef GetFoundServicesCountDart = int Function();
 
+// 新增 JSON callback FFI type definitions
+typedef DeviceFoundJsonCallbackNative = Void Function(Pointer<Utf8> jsonStr);
+typedef DeviceFoundJsonCallbackDart = void Function(Pointer<Utf8> jsonStr);
+
+typedef StartMdnsScanJsonNative = Void Function(
+  Pointer<Utf8> serviceType,
+  Pointer<NativeFunction<DeviceFoundJsonCallbackNative>> cb,
+  Int32 debugMode,
+);
+typedef StartMdnsScanJsonDart = void Function(
+  Pointer<Utf8> serviceType,
+  Pointer<NativeFunction<DeviceFoundJsonCallbackNative>> cb,
+  int debugMode,
+);
+
+typedef StartMdnsPeriodicScanJsonNative = Void Function(
+  Pointer<Utf8> serviceType,
+  Int32 queryIntervalMs,
+  Int32 totalDurationMs,
+  Pointer<NativeFunction<DeviceFoundJsonCallbackNative>> cb,
+  Int32 debugMode,
+);
+typedef StartMdnsPeriodicScanJsonDart = void Function(
+  Pointer<Utf8> serviceType,
+  int queryIntervalMs,
+  int totalDurationMs,
+  Pointer<NativeFunction<DeviceFoundJsonCallbackNative>> cb,
+  int debugMode,
+);
+
 // Global callback holder
 DeviceFoundCallbackDart? _dartDeviceFoundCallback;
 
@@ -76,14 +107,22 @@ class MdnsFfi {
   late final ProcessMdnsEventsDart _processEvents;
   late final IsMdnsScanningDart _isScanning;
   late final GetFoundServicesCountDart _getFoundServicesCount;
-  Timer? _eventProcessingTimer;
+  late final StartMdnsScanJsonDart _startScanJson;
+  late final StartMdnsPeriodicScanJsonDart _startPeriodicScanJson;
+  DeviceFoundJsonCallbackDart? _dartDeviceFoundJsonCallback;
   final List<DeviceInfo> _foundDevices = [];
+  Timer? _eventProcessingTimer;
 
-  /// Create a new MdnsFfi instance
-  ///
-  /// [libraryPath] is optional. If not provided, will search for the library
-  /// in common locations relative to the current working directory.
-  MdnsFfi({String? libraryPath}) {
+  static void _ffiDeviceFoundJsonCallback(Pointer<Utf8> jsonStrPtr) {
+    // 這裡假設只有一個 MdnsFfi instance
+    _singleton?._dartDeviceFoundJsonCallback?.call(jsonStrPtr);
+  }
+
+  static MdnsFfi? _singleton;
+
+  int debugLevel;
+
+  MdnsFfi({String? libraryPath, this.debugLevel = 1}) {
     if (!Platform.isMacOS) {
       throw UnsupportedError('Only macOS supported');
     }
@@ -115,6 +154,14 @@ class MdnsFfi {
     _getFoundServicesCount = _lib
         .lookup<NativeFunction<GetFoundServicesCountNative>>(
             'get_found_services_count')
+        .asFunction();
+
+    _startScanJson = _lib
+        .lookup<NativeFunction<StartMdnsScanJsonNative>>('start_mdns_scan_json')
+        .asFunction();
+    _startPeriodicScanJson = _lib
+        .lookup<NativeFunction<StartMdnsPeriodicScanJsonNative>>(
+            'start_mdns_periodic_scan_json')
         .asFunction();
   }
 
@@ -247,11 +294,13 @@ class MdnsFfi {
 
     _foundDevices.add(device);
 
-    final timeStr =
-        '${foundTime.hour.toString().padLeft(2, '0')}:${foundTime.minute.toString().padLeft(2, '0')}:${foundTime.second.toString().padLeft(2, '0')}.${foundTime.millisecond.toString().padLeft(3, '0')}';
+    if (debugLevel >= 2) {
+      final timeStr =
+          '${foundTime.hour.toString().padLeft(2, '0')}:${foundTime.minute.toString().padLeft(2, '0')}:${foundTime.second.toString().padLeft(2, '0')}.${foundTime.millisecond.toString().padLeft(3, '0')}';
 
-    print(
-        '⏰ [$timeStr] Found: $nameStr ($serviceType) at $ipStr:$port [Query #$queryNumber]');
+      print(
+          '⏰ [$timeStr] Found: $nameStr ($serviceType) at $ipStr:$port [Query #$queryNumber]');
+    }
   }
 
   /// Start scanning for a specific service type
@@ -264,7 +313,9 @@ class MdnsFfi {
       _ffiDeviceFoundCallback,
     );
 
-    print('🚀 Starting scan for: $serviceType');
+    if (debugLevel >= 2) {
+      print('🚀 Starting scan for: $serviceType');
+    }
     _startScan(serviceTypePtr, cbPtr);
 
     // 啟動事件處理定時器（如果還沒啟動）
@@ -289,8 +340,10 @@ class MdnsFfi {
       _ffiDeviceFoundCallback,
     );
 
-    print(
-        '🚀 Starting periodic scan for: $serviceType (interval: ${queryIntervalMs}ms, duration: ${totalDurationMs}ms)');
+    if (debugLevel >= 2) {
+      print(
+          '🚀 Starting periodic scan for: $serviceType (interval: \\${queryIntervalMs}ms, duration: \\${totalDurationMs}ms)');
+    }
     _startPeriodicScan(serviceTypePtr, queryIntervalMs, totalDurationMs, cbPtr);
 
     // 啟動事件處理定時器（如果還沒啟動）
@@ -299,9 +352,68 @@ class MdnsFfi {
     calloc.free(serviceTypePtr);
   }
 
+  void startScanJson(
+      String serviceType, void Function(Map<String, dynamic>) onJson,
+      {int debug = 1}) {
+    _singleton = this;
+    final serviceTypePtr = serviceType.toNativeUtf8();
+    _dartDeviceFoundJsonCallback = (Pointer<Utf8> jsonStrPtr) {
+      final jsonStr = jsonStrPtr.toDartString();
+      try {
+        final map = jsonStr.isNotEmpty
+            ? Map<String, dynamic>.from(json.decode(jsonStr) as Map)
+            : <String, dynamic>{};
+        onJson(map);
+      } catch (e) {
+        if (debugLevel >= 1) {
+          print('❌ JSON parse error: $e, raw: $jsonStr');
+        }
+      }
+    };
+    final cbPtr = Pointer.fromFunction<DeviceFoundJsonCallbackNative>(
+        _ffiDeviceFoundJsonCallback);
+    _startScanJson(serviceTypePtr, cbPtr, debug);
+    if (debugLevel >= 3) {
+      print('🔄 Starting event processing timer');
+    }
+    _startEventProcessing();
+    calloc.free(serviceTypePtr);
+  }
+
+  void startPeriodicScanJson(
+      String serviceType, void Function(Map<String, dynamic>) onJson,
+      {int queryIntervalMs = 0, int totalDurationMs = 0, int debug = 1}) {
+    _singleton = this;
+    final serviceTypePtr = serviceType.toNativeUtf8();
+    _dartDeviceFoundJsonCallback = (Pointer<Utf8> jsonStrPtr) {
+      final jsonStr = jsonStrPtr.toDartString();
+      try {
+        final map = jsonStr.isNotEmpty
+            ? Map<String, dynamic>.from(json.decode(jsonStr) as Map)
+            : <String, dynamic>{};
+        onJson(map);
+      } catch (e) {
+        if (debugLevel >= 1) {
+          print('❌ JSON parse error: $e, raw: $jsonStr');
+        }
+      }
+    };
+    final cbPtr = Pointer.fromFunction<DeviceFoundJsonCallbackNative>(
+        _ffiDeviceFoundJsonCallback);
+    _startPeriodicScanJson(
+        serviceTypePtr, queryIntervalMs, totalDurationMs, cbPtr, debug);
+    if (debugLevel >= 3) {
+      print('🔄 Starting event processing timer');
+    }
+    _startEventProcessing();
+    calloc.free(serviceTypePtr);
+  }
+
   /// Stop all active scans
   void stopScan() {
-    print('🛑 Stopping all scans');
+    if (debugLevel >= 2) {
+      print('🛑 Stopping all scans');
+    }
     _stopScan();
     _stopEventProcessing();
     _dartDeviceFoundCallback = null;
@@ -320,8 +432,9 @@ class MdnsFfi {
   /// Start the event processing timer
   void _startEventProcessing() {
     if (_eventProcessingTimer?.isActive == true) return;
-
-    print('🔄 Starting event processing timer');
+    if (debugLevel >= 3) {
+      print('🔄 Starting event processing timer');
+    }
     _eventProcessingTimer = Timer.periodic(
       Duration(milliseconds: 50),
       (timer) {
@@ -333,97 +446,100 @@ class MdnsFfi {
   /// Stop the event processing timer
   void _stopEventProcessing() {
     if (_eventProcessingTimer?.isActive == true) {
-      print('⏹️ Stopping event processing timer');
+      if (debugLevel >= 3) {
+        print('⏹️ Stopping event processing timer');
+      }
       _eventProcessingTimer?.cancel();
       _eventProcessingTimer = null;
     }
   }
 
   /// Scan multiple service types simultaneously
-  ///
   /// Returns a list of all discovered devices
   Future<List<DeviceInfo>> scanMultipleServices(
     List<String> serviceTypes, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    print(
-        '🎯 Starting simultaneous scan for ${serviceTypes.length} services...');
+    if (debugLevel >= 2) {
+      print(
+          '🎯 Starting simultaneous scan for \\${serviceTypes.length} services...');
+    }
     _foundDevices.clear();
-
-    // 同時啟動所有搜尋
     for (String serviceType in serviceTypes) {
       startScan(serviceType);
-      // 短暫延遲避免同時啟動太多搜尋
       await Future.delayed(Duration(milliseconds: 200));
     }
-
-    print('⏱️ Waiting ${timeout.inSeconds} seconds for results...');
-
-    // 監控掃描狀態
+    if (debugLevel >= 2) {
+      print('⏱️ Waiting \\${timeout.inSeconds} seconds for results...');
+    }
     final startTime = DateTime.now();
     while (DateTime.now().difference(startTime) < timeout) {
       await Future.delayed(Duration(milliseconds: 1000));
-      print(
-          '📊 Status: ${isScanning() ? "Scanning" : "Stopped"}, Found: ${_foundDevices.length} devices, C++ count: ${getFoundServicesCount()}');
+      if (debugLevel >= 3) {
+        print(
+            '📊 Status: \\${isScanning() ? "Scanning" : "Stopped"}, Found: \\${_foundDevices.length} devices, C++ count: \\${getFoundServicesCount()}');
+      }
     }
-
     stopScan();
-
-    print(
-        '✅ Simultaneous scan completed. Found ${_foundDevices.length} devices');
+    if (debugLevel >= 2) {
+      print(
+          '✅ Simultaneous scan completed. Found \\${_foundDevices.length} devices');
+    }
     return List.from(_foundDevices);
   }
 
   /// Scan multiple service types with periodic queries
-  ///
   /// Returns a list of all discovered devices
   Future<List<DeviceInfo>> scanMultipleServicesWithPeriodic(
     List<String> serviceTypes, {
     Duration timeout = const Duration(seconds: 30),
     Duration queryInterval = const Duration(seconds: 5),
   }) async {
-    print(
-        '🎯 Starting periodic simultaneous scan for ${serviceTypes.length} services...');
-    print(
-        '📅 Query interval: ${queryInterval.inSeconds}s, Total duration: ${timeout.inSeconds}s');
+    if (debugLevel >= 2) {
+      print(
+          '🎯 Starting periodic simultaneous scan for \\${serviceTypes.length} services...');
+      print(
+          '📅 Query interval: \\${queryInterval.inSeconds}s, Total duration: \\${timeout.inSeconds}s');
+    }
     _foundDevices.clear();
-
     final queryIntervalMs = queryInterval.inMilliseconds;
     final totalDurationMs = timeout.inMilliseconds;
-
-    // 同時啟動所有週期性搜尋
     for (String serviceType in serviceTypes) {
       startPeriodicScan(
         serviceType,
         queryIntervalMs: queryIntervalMs,
         totalDurationMs: totalDurationMs,
       );
-      // 短暫延遲避免同時啟動太多搜尋
       await Future.delayed(Duration(milliseconds: 300));
     }
-
-    print('⏱️ Monitoring periodic scans for ${timeout.inSeconds} seconds...');
-
-    // 監控掃描狀態
+    if (debugLevel >= 2) {
+      print(
+          '⏱️ Monitoring periodic scans for \\${timeout.inSeconds} seconds...');
+    }
     final startTime = DateTime.now();
     while (DateTime.now().difference(startTime) < timeout && isScanning()) {
       await Future.delayed(Duration(milliseconds: 2000));
       final elapsed = DateTime.now().difference(startTime);
-      print(
-          '📊 [${elapsed.inSeconds}s] Status: ${isScanning() ? "Scanning" : "Stopped"}, Found: ${_foundDevices.length} devices');
+      if (debugLevel >= 3) {
+        print(
+            '📊 [\\${elapsed.inSeconds}s] Status: \\${isScanning() ? "Scanning" : "Stopped"}, Found: \\${_foundDevices.length} devices');
+      }
     }
-
     if (isScanning()) {
-      print('⏰ Timeout reached, stopping scans...');
+      if (debugLevel >= 2) {
+        print('⏰ Timeout reached, stopping scans...');
+      }
       stopScan();
     } else {
-      print('✅ All scans completed naturally');
+      if (debugLevel >= 2) {
+        print('✅ All scans completed naturally');
+      }
     }
-
-    // 確保事件處理定時器被停止
     _stopEventProcessing();
-
-    print('✅ Periodic scan completed. Found ${_foundDevices.length} devices');
+    if (debugLevel >= 2) {
+      print(
+          '✅ Periodic scan completed. Found \\${_foundDevices.length} devices');
+    }
     return List.from(_foundDevices);
   }
 
