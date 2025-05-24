@@ -27,3 +27,8 @@ library native_mdns_scanner;
 export 'src/mdns_bindings.dart';
 export 'src/device_info.dart';
 export 'src/timing_analyzer.dart';
+
+/// 別名，讓用戶可用 NativeMdnsScanner 這個名稱
+import 'src/mdns_bindings.dart' show MdnsFfi;
+
+typedef NativeMdnsScanner = MdnsFfi;

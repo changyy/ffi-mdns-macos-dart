@@ -34,7 +34,7 @@ Options:
 
 Future<void> runSimpleScan(String serviceType,
     {int timeoutSeconds = 15, int debugLevel = 1}) async {
-  final mdnsFfi = MdnsFfi(debugLevel: debugLevel);
+  final mdnsFfi = NativeMdnsScanner(debugLevel: debugLevel);
   final foundDevices = <DeviceInfo>[];
   try {
     print('🔍 Starting simple scan for: $serviceType');
@@ -73,7 +73,7 @@ Future<void> runSimpleScan(String serviceType,
 
 Future<void> runMultiScan(List<String> serviceTypes,
     {int timeoutSeconds = 15, int debugLevel = 1}) async {
-  final mdnsFfi = MdnsFfi(debugLevel: debugLevel);
+  final mdnsFfi = NativeMdnsScanner(debugLevel: debugLevel);
   final foundDevices = <DeviceInfo>[];
   try {
     print(
@@ -128,7 +128,7 @@ Future<void> runPeriodicScan(
   int durationSeconds = 30,
   int debugLevel = 1,
 }) async {
-  final mdnsFfi = MdnsFfi(debugLevel: debugLevel);
+  final mdnsFfi = NativeMdnsScanner(debugLevel: debugLevel);
   final foundDevices = <DeviceInfo>[];
   try {
     print('🔄 Starting periodic scan for: \\${serviceType}');
@@ -169,7 +169,7 @@ Future<void> runPeriodicScan(
 
 Future<void> runTimingAnalysis(List<String> serviceTypes,
     {int timeoutSeconds = 15}) async {
-  final mdnsFfi = MdnsFfi();
+  final mdnsFfi = NativeMdnsScanner();
 
   try {
     print('📊 Starting timing analysis for ${serviceTypes.length} services:');

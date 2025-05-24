@@ -1,6 +1,6 @@
 name: native_mdns_scanner
 description: Dart FFI bindings for macOS mDNS/Bonjour services. Provides native access to multicast DNS functionality on macOS.
-version: 1.1.0
+version: 1.2.0
 homepage: https://github.com/changyy/ffi-mdns-macos-dart
 repository: https://github.com/changyy/ffi-mdns-macos-dart
 issue_tracker: https://github.com/changyy/ffi-mdns-macos-dart/issues

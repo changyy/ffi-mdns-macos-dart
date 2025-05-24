@@ -7,8 +7,10 @@ void main() {
     test('should only run on macOS', () {
       if (!Platform.isMacOS) {
         expect(() => MdnsFfi(), throwsA(isA<UnsupportedError>()));
+        expect(() => NativeMdnsScanner(), throwsA(isA<UnsupportedError>()));
       } else {
         expect(() => MdnsFfi(), returnsNormally);
+        expect(() => NativeMdnsScanner(), returnsNormally);
       }
     });
   });

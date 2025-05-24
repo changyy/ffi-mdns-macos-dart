@@ -5,7 +5,7 @@ void main() async {
   final int debugLevel = int.tryParse(
           const String.fromEnvironment('DEBUG_LEVEL', defaultValue: '1')) ??
       1;
-  final mdnsFfi = MdnsFfi(debugLevel: debugLevel);
+  final mdnsFfi = NativeMdnsScanner(debugLevel: debugLevel);
   final foundDevices1 = <DeviceInfo>[];
   final foundDevices2 = <DeviceInfo>[];
   try {

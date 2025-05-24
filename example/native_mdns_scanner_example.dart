@@ -1,7 +1,7 @@
 import 'package:native_mdns_scanner/native_mdns_scanner.dart';
 
 void main() async {
-  final mdnsFfi = MdnsFfi();
+  final mdnsFfi = NativeMdnsScanner();
   final foundDevices = <DeviceInfo>[];
   try {
     print('🔍 Basic mDNS scanning example\n');

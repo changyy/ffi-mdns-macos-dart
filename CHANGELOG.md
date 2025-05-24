@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-05-24
+
+### Added
+- Added `NativeMdnsScanner` type alias for `MdnsFfi`, making the main class name consistent with the package name for easier and more intuitive usage.
+- All examples, CLI tools, and tests now use `NativeMdnsScanner` instead of `MdnsFfi` in documentation and code samples.
+- Added test coverage to ensure `NativeMdnsScanner` can be constructed and used identically to `MdnsFfi`.
+
+### Changed
+- Updated all example and CLI code to use `NativeMdnsScanner` for improved clarity and consistency.
+- Documentation and usage instructions now recommend `NativeMdnsScanner` as the primary class name.
+
 ## [1.1.0] - 2025-05-23
 
 ### Changed
