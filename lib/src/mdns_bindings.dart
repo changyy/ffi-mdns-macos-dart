@@ -179,35 +179,40 @@ class MdnsFfi {
     const libraryName = 'libmdns_ffi.dylib';
 
     // Common search paths (in order of preference)
-    final searchPaths = [
-      // 1. Development environment (current package)
-      'native/$libraryName',
+    final searchPaths = <String>[];
 
-      // 2. Current directory
-      libraryName,
+    // 1. Package dependency path (highest priority for published packages)
+    final packagePath = _findPackagePath();
+    if (packagePath != null) {
+      searchPaths.add('$packagePath/native/$libraryName');
+    }
 
-      // 3. Relative to Dart script location
-      '../native/$libraryName',
+    // 2. Development environment (current package)
+    searchPaths.add('native/$libraryName');
 
-      // 4. System-wide locations
-      '/usr/local/lib/$libraryName',
-      '/opt/homebrew/lib/$libraryName',
+    // 3. Current directory
+    searchPaths.add(libraryName);
 
-      // 5. Common build output directories
+    // 4. Relative to Dart script location
+    searchPaths.add('../native/$libraryName');
+
+    // 5. Common build output directories
+    searchPaths.addAll([
       'build/$libraryName',
       'build/macos/$libraryName',
+    ]);
 
-      // 6. Flutter project structure
-      'macos/Runner/$libraryName',
+    // 6. Flutter project structure
+    searchPaths.add('macos/Runner/$libraryName');
 
-      // 7. Package installation location (when used as dependency)
-      '.dart_tool/package_config.json', // We'll handle this specially
-    ];
+    // 7. System-wide locations (as fallback)
+    searchPaths.addAll([
+      '/usr/local/lib/$libraryName',
+      '/opt/homebrew/lib/$libraryName',
+    ]);
 
-    // Check direct paths first
+    // Check all paths
     for (final path in searchPaths) {
-      if (path.endsWith('.json')) continue; // Skip the special case
-
       final file = File(path);
       if (file.existsSync()) {
         if (!silentLibraryPrint) {
@@ -217,24 +222,14 @@ class MdnsFfi {
       }
     }
 
-    // Try to find via package dependency path
-    final packagePath = _findPackagePath();
-    if (packagePath != null) {
-      final packageLibPath = '$packagePath/native/$libraryName';
-      final file = File(packageLibPath);
-      if (file.existsSync()) {
-        if (!silentLibraryPrint) {
-          print('📚 Found library in package at: $packageLibPath');
-        }
-        return packageLibPath;
-      }
-    }
-
     // If nothing found, provide helpful error message
-    final searchedPaths =
-        searchPaths.where((p) => !p.endsWith('.json')).join('\n  ');
+    final searchedPaths = searchPaths.join('\n  ');
+    final packageInfo = packagePath != null
+        ? '\n  Package path attempted: $packagePath/native/$libraryName'
+        : '\n  Package path: Could not resolve from .dart_tool/package_config.json';
+
     throw FileSystemException(
-        'Could not find $libraryName. Searched in:\n  $searchedPaths\n\n'
+        'Could not find $libraryName. Searched in:\n  $searchedPaths$packageInfo\n\n'
         'Please ensure the library is built and available, or specify a custom path:\n'
         '  MdnsFfi(libraryPath: "path/to/$libraryName")\n\n'
         'To build the library, run: cd native && ./build.sh');
@@ -246,8 +241,24 @@ class MdnsFfi {
       final configFile = File('.dart_tool/package_config.json');
       if (!configFile.existsSync()) return null;
 
-      // This is a simplified approach - in a real implementation,
-      // you might want to parse the JSON to find the exact package path
+      // Parse package_config.json to find the exact package path
+      final configContent = configFile.readAsStringSync();
+      final config = json.decode(configContent) as Map<String, dynamic>;
+      final packages = config['packages'] as List<dynamic>;
+
+      for (final package in packages) {
+        final packageMap = package as Map<String, dynamic>;
+        if (packageMap['name'] == 'native_mdns_scanner') {
+          final rootUri = packageMap['rootUri'] as String;
+          if (rootUri.startsWith('file://')) {
+            // Convert file:// URI to local path
+            final packagePath = Uri.parse(rootUri).toFilePath();
+            return packagePath;
+          }
+        }
+      }
+
+      // Fallback: try common locations
       final cwd = Directory.current.path;
       final possiblePaths = [
         '$cwd/.dart_tool/package_resolver/packages/native_mdns_scanner',
@@ -261,6 +272,9 @@ class MdnsFfi {
       }
     } catch (e) {
       // Ignore errors in package path resolution
+      if (!silentLibraryPrint) {
+        print('⚠️ Package path resolution failed: $e');
+      }
     }
     return null;
   }

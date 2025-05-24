@@ -1,6 +1,6 @@
 name: native_mdns_scanner
 description: Dart FFI bindings for macOS mDNS/Bonjour services. Provides native access to multicast DNS functionality on macOS.
-version: 1.4.0
+version: 1.5.0
 homepage: https://github.com/changyy/ffi-mdns-macos-dart
 repository: https://github.com/changyy/ffi-mdns-macos-dart
 issue_tracker: https://github.com/changyy/ffi-mdns-macos-dart/issues
@@ -15,6 +15,21 @@ dev_dependencies:
   test: ^1.24.0
   lints: ^6.0.0
 
+# Explicitly include native library in published package
+# This ensures the dylib is bundled for both Flutter and pure Dart projects
+files:
+  - native/libmdns_ffi.dylib
+
+# Flutter asset configuration (for Flutter projects)
+flutter:
+  assets:
+    - native/libmdns_ffi.dylib
+
+# The library will be automatically found via:
+# 1. Package dependency path resolution (pure Dart)
+# 2. Flutter assets (Flutter projects)
+# 3. Local development path (when working with source)
+
 topics:
   - ffi
   - mdns
@@ -25,5 +40,6 @@ topics:
 platforms:
   macos:
 
+# Post-install script and CLI tool
 executables:
   mdns_cli: mdns_cli

@@ -39,6 +39,67 @@ dependencies:
       url: https://github.com/changyy/ffi-mdns-macos-dart.git
 ```
 
+### Library Distribution & Portable Deployment
+
+This package uses a **comprehensive portable deployment strategy** where the native library (`libmdns_ffi.dylib`) is bundled with the Dart package using multiple complementary approaches:
+
+**📦 Deployment Methods:**
+1. **`files:` Configuration**: Explicitly includes the library in the published package
+2. **Flutter Assets**: For Flutter projects, library included as asset  
+3. **Intelligent Path Resolution**: Automatic discovery across project types
+
+```yaml
+# In pubspec.yaml - ensures library is always included
+files:
+  - native/libmdns_ffi.dylib
+
+flutter:
+  assets:
+    - native/libmdns_ffi.dylib
+```
+
+**✅ Supported Project Types:**
+- **Flutter Projects**: Library included as asset, automatically found
+- **Pure Dart Projects**: Library bundled with package via `files:` configuration
+- **Command-line Tools**: Full portable deployment support
+- **Development**: Local `native/` directory takes priority
+
+**Key Benefits:**
+- 🎯 **Portable**: Library travels with your application
+- 🔧 **Zero Setup**: No manual library installation needed
+- 📦 **Bundled**: Everything needed is in the package
+- 🔍 **Auto-Discovery**: Intelligent library path resolution
+- 🛡️ **Redundant**: Multiple deployment methods for maximum compatibility
+
+**For Package Users:** 
+```bash
+# No additional setup needed - just add to pubspec.yaml and run:
+dart pub get
+
+# The library will be automatically located in your .dart_tool/ cache
+```
+
+**For Development:**
+```bash
+# If working with source code, ensure library is built:
+cd native && ./build.sh
+```
+
+**How It Works:**
+1. **Flutter Projects**: Library included as asset in `pubspec.yaml`
+2. **Pure Dart**: Library found via package dependency resolution
+3. **Development**: Local `native/` directory takes priority
+
+The library search order:
+1. Package dependency path (highest priority for published packages)  
+2. Local development path (`native/libmdns_ffi.dylib`)
+3. Current directory and common build locations
+4. System-wide locations (fallback)
+flutter:
+  assets:
+    - native/libmdns_ffi.dylib
+```
+
 ## Quick Start
 
 ### Basic Usage

@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2025-05-24
+
+### Added
+- **Comprehensive deployment testing suite** with multiple test scenarios for package distribution and library loading.
+- **Final deployment verification** tool (`test_final_deployment.dart`) that validates package readiness for pub.dev.
+- **Package installation simulation** testing to ensure library loading works correctly in installed packages.
+- **Library search path testing** with priority-based path resolution verification.
+- **Package configuration validation** including `package_config.json` parsing and path resolution.
+- **Flutter asset configuration** testing to ensure compatibility with Flutter projects.
+
+### Improved
+- **Enhanced package configuration** in `pubspec.yaml` with explicit `files:` section for native library inclusion.
+- **Robust library loading** with multiple fallback paths for different deployment scenarios.
+- **Package deployment readiness** verification with automated testing for pub.dev distribution.
+- **Cross-platform deployment testing** ensuring proper library bundling and discovery.
+
+### Fixed
+- **Native library path resolution** improved for various deployment contexts (development, pub install, Flutter projects).
+- **Package structure validation** to ensure all required files are properly included in published packages.
+
+### Documentation
+- **Deployment testing documentation** with comprehensive test suite descriptions.
+- **Package configuration guide** for proper native library inclusion and distribution.
+
 ## [1.4.0] - 2025-05-24
 
 ### Added

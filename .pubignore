@@ -1,0 +1,40 @@
+# Files to exclude from pub package
+
+# Development and build artifacts
+.dart_tool/
+build/
+doc/api/
+pubspec.lock
+
+# IDE and editor files
+.vscode/
+.idea/
+*.iml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Environment files
+.env*
+
+# Git files
+.git/
+.gitignore
+
+# Examples that are too large or not essential
+# (keep basic examples for demonstration)
+
+# Native build artifacts (keep only the final dylib)
+native/*.o
+native/*.dSYM/
+native/build/
+
+# Ensure these important files are included:
+# - native/libmdns_ffi.dylib (the compiled library)
+# - native/mdns_ffi.h (header file)
+# - native/mdns_ffi.m (source for reference)
+# - native/build.sh (build script)
