@@ -84,6 +84,9 @@ typedef StartMdnsPeriodicScanJsonDart = void Function(
   int debugMode,
 );
 
+typedef SetMdnsSilentModeNative = Void Function(Int32 silent);
+typedef SetMdnsSilentModeDart = void Function(int silent);
+
 // Global callback holder
 DeviceFoundCallbackDart? _dartDeviceFoundCallback;
 
@@ -100,6 +103,8 @@ void _ffiDeviceFoundCallback(
 
 /// Main class for mDNS scanning functionality
 class MdnsFfi {
+  static bool silentLibraryPrint = false;
+
   late final DynamicLibrary _lib;
   late final StartMdnsScanDart _startScan;
   late final StartMdnsPeriodicScanDart _startPeriodicScan;
@@ -109,6 +114,7 @@ class MdnsFfi {
   late final GetFoundServicesCountDart _getFoundServicesCount;
   late final StartMdnsScanJsonDart _startScanJson;
   late final StartMdnsPeriodicScanJsonDart _startPeriodicScanJson;
+  late final SetMdnsSilentModeDart _setSilentMode;
   DeviceFoundJsonCallbackDart? _dartDeviceFoundJsonCallback;
   final List<DeviceInfo> _foundDevices = [];
   Timer? _eventProcessingTimer;
@@ -163,6 +169,9 @@ class MdnsFfi {
         .lookup<NativeFunction<StartMdnsPeriodicScanJsonNative>>(
             'start_mdns_periodic_scan_json')
         .asFunction();
+    _setSilentMode = _lib
+        .lookup<NativeFunction<SetMdnsSilentModeNative>>('set_mdns_silent_mode')
+        .asFunction();
   }
 
   /// Find the library in common locations
@@ -201,7 +210,9 @@ class MdnsFfi {
 
       final file = File(path);
       if (file.existsSync()) {
-        print('📚 Found library at: $path');
+        if (!silentLibraryPrint) {
+          print('📚 Found library at: $path');
+        }
         return path;
       }
     }
@@ -212,7 +223,9 @@ class MdnsFfi {
       final packageLibPath = '$packagePath/native/$libraryName';
       final file = File(packageLibPath);
       if (file.existsSync()) {
-        print('📚 Found library in package at: $packageLibPath');
+        if (!silentLibraryPrint) {
+          print('📚 Found library in package at: $packageLibPath');
+        }
         return packageLibPath;
       }
     }
@@ -318,7 +331,7 @@ class MdnsFfi {
     }
     _startScan(serviceTypePtr, cbPtr);
 
-    // 啟動事件處理定時器（如果還沒啟動）
+    // 啟動事件處理定時器（如果還沒啟动）
     _startEventProcessing();
 
     calloc.free(serviceTypePtr);
@@ -436,6 +449,11 @@ class MdnsFfi {
   /// Get the number of services found in the native library
   int getFoundServicesCount() {
     return _getFoundServicesCount();
+  }
+
+  /// Set native silent mode (suppresses native logs)
+  void setSilentMode(bool silent) {
+    _setSilentMode(silent ? 1 : 0);
   }
 
   /// Start the event processing timer

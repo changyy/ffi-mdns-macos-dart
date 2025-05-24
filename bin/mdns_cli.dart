@@ -1,9 +1,11 @@
 #!/usr/bin/env dart
 
 import 'dart:io';
+import 'dart:convert';
 import 'package:native_mdns_scanner/native_mdns_scanner.dart';
 
-void printUsage() {
+void printUsage({bool jsonMode = false}) {
+  if (jsonMode) return;
   print('''
 mDNS CLI Tool
 
@@ -28,17 +30,26 @@ Options:
   --interval <seconds>    Query interval for periodic scan (default: 5)
   --duration <seconds>    Total duration for periodic scan (default: 30)
   --debug[=<level>]       Show debug messages (0=quiet, 1=error/result, 2=normal, 3=verbose; default: 0)
+  --json                   Output results in JSON format
   --help, -h              Show this help message
 ''');
 }
 
 Future<void> runSimpleScan(String serviceType,
-    {int timeoutSeconds = 15, int debugLevel = 1}) async {
+    {int timeoutSeconds = 15,
+    int debugLevel = 1,
+    bool jsonMode = false}) async {
   final mdnsFfi = NativeMdnsScanner(debugLevel: debugLevel);
+  if (jsonMode) mdnsFfi.setSilentMode(true);
   final foundDevices = <DeviceInfo>[];
+  bool first = true;
   try {
-    print('🔍 Starting simple scan for: $serviceType');
-    print('⏱️ Timeout: \\${timeoutSeconds}s\n');
+    if (jsonMode) {
+      stdout.write('{"processing": [\n');
+    } else {
+      print('🔍 Starting simple scan for: $serviceType');
+      print('⏱️ Timeout: \\${timeoutSeconds}s\n');
+    }
     mdnsFfi.startScanJson(serviceType, (json) {
       if (json['type'] == 'device') {
         foundDevices.add(DeviceInfo(
@@ -48,8 +59,20 @@ Future<void> runSimpleScan(String serviceType,
           serviceType: json['type_name'] ?? '',
           txtRecords: Map<String, String>.from(json['txt'] ?? {}),
         ));
+        if (jsonMode) {
+          if (!first) stdout.write(',\n');
+          stdout.write(jsonEncode(json));
+          first = false;
+        }
       } else if (json['type'] == 'error') {
-        print('❌ Native error: \\${json['message']}');
+        if (jsonMode) {
+          // 可選：錯誤也輸出到 processing
+          if (!first) stdout.write(',\n');
+          stdout.write(jsonEncode(json));
+          first = false;
+        } else {
+          print('❌ Native error: \\${json['message']}');
+        }
       }
     }, debug: debugLevel);
     final startTime = DateTime.now();
@@ -58,12 +81,22 @@ Future<void> runSimpleScan(String serviceType,
       if (!mdnsFfi.isScanning()) break;
     }
     mdnsFfi.stopScan();
-    print('\n📋 Scan Results:');
-    print('Found \\${foundDevices.length} devices');
-    for (final device in foundDevices) {
-      print('  • \\${device.name} (\\${device.ip}:\\${device.port})');
-      if (device.txtRecords.isNotEmpty) {
-        print('    TXT: \\${device.txtRecords}');
+    if (jsonMode) {
+      stdout.write('\n],\n"result": ');
+      stdout.write(jsonEncode({
+        'type': 'summary',
+        'count': foundDevices.length,
+        'devices': foundDevices.map((d) => d.toJson()).toList()
+      }));
+      stdout.write('}\n');
+    } else {
+      print('\n📋 Scan Results:');
+      print('Found \\${foundDevices.length} devices');
+      for (final device in foundDevices) {
+        print('  • \\${device.name} (\\${device.ip}:\\${device.port})');
+        if (device.txtRecords.isNotEmpty) {
+          print('    TXT: \\${device.txtRecords}');
+        }
       }
     }
   } finally {
@@ -72,16 +105,24 @@ Future<void> runSimpleScan(String serviceType,
 }
 
 Future<void> runMultiScan(List<String> serviceTypes,
-    {int timeoutSeconds = 15, int debugLevel = 1}) async {
+    {int timeoutSeconds = 15,
+    int debugLevel = 1,
+    bool jsonMode = false}) async {
   final mdnsFfi = NativeMdnsScanner(debugLevel: debugLevel);
+  if (jsonMode) mdnsFfi.setSilentMode(true);
   final foundDevices = <DeviceInfo>[];
+  bool first = true;
   try {
-    print(
-        '🎯 Starting simultaneous scan for \\${serviceTypes.length} services:');
-    for (final service in serviceTypes) {
-      print('  • \\${service}');
+    if (jsonMode) {
+      stdout.write('{"processing": [\n');
+    } else {
+      print(
+          '🎯 Starting simultaneous scan for \\${serviceTypes.length} services:');
+      for (final service in serviceTypes) {
+        print('  • \\${service}');
+      }
+      print('⏱️ Timeout: \\${timeoutSeconds}s\n');
     }
-    print('⏱️ Timeout: \\${timeoutSeconds}s\n');
     for (final serviceType in serviceTypes) {
       mdnsFfi.startScanJson(serviceType, (json) {
         if (json['type'] == 'device') {
@@ -92,8 +133,19 @@ Future<void> runMultiScan(List<String> serviceTypes,
             serviceType: json['type_name'] ?? '',
             txtRecords: Map<String, String>.from(json['txt'] ?? {}),
           ));
+          if (jsonMode) {
+            if (!first) stdout.write(',\n');
+            stdout.write(jsonEncode(json));
+            first = false;
+          }
         } else if (json['type'] == 'error') {
-          print('❌ Native error: \\${json['message']}');
+          if (jsonMode) {
+            if (!first) stdout.write(',\n');
+            stdout.write(jsonEncode(json));
+            first = false;
+          } else {
+            print('❌ Native error: \\${json['message']}');
+          }
         }
       }, debug: debugLevel);
       await Future.delayed(Duration(milliseconds: 200));
@@ -104,17 +156,27 @@ Future<void> runMultiScan(List<String> serviceTypes,
       if (!mdnsFfi.isScanning()) break;
     }
     mdnsFfi.stopScan();
-    print('\n📋 Multi-Scan Results:');
-    print('Total devices found: \\${foundDevices.length}');
-    final devicesByType = <String, List<DeviceInfo>>{};
-    for (final device in foundDevices) {
-      devicesByType.putIfAbsent(device.serviceType, () => []).add(device);
-    }
-    for (String serviceType in devicesByType.keys) {
-      final typeDevices = devicesByType[serviceType]!;
-      print('\n\\${serviceType} (\\${typeDevices.length} devices):');
-      for (final device in typeDevices) {
-        print('  • \\${device.name} (\\${device.ip}:\\${device.port})');
+    if (jsonMode) {
+      stdout.write('\n],\n"result": ');
+      stdout.write(jsonEncode({
+        'type': 'summary',
+        'count': foundDevices.length,
+        'devices': foundDevices.map((d) => d.toJson()).toList()
+      }));
+      stdout.write('}\n');
+    } else {
+      print('\n📋 Multi-Scan Results:');
+      print('Total devices found: \\${foundDevices.length}');
+      final devicesByType = <String, List<DeviceInfo>>{};
+      for (final device in foundDevices) {
+        devicesByType.putIfAbsent(device.serviceType, () => []).add(device);
+      }
+      for (String serviceType in devicesByType.keys) {
+        final typeDevices = devicesByType[serviceType]!;
+        print('\n\\${serviceType} (\\${typeDevices.length} devices):');
+        for (final device in typeDevices) {
+          print('  • \\${device.name} (\\${device.ip}:\\${device.port})');
+        }
       }
     }
   } finally {
@@ -127,13 +189,20 @@ Future<void> runPeriodicScan(
   int intervalSeconds = 5,
   int durationSeconds = 30,
   int debugLevel = 1,
+  bool jsonMode = false,
 }) async {
   final mdnsFfi = NativeMdnsScanner(debugLevel: debugLevel);
+  if (jsonMode) mdnsFfi.setSilentMode(true);
   final foundDevices = <DeviceInfo>[];
+  bool first = true;
   try {
-    print('🔄 Starting periodic scan for: \\${serviceType}');
-    print(
-        '📅 Query interval: \\${intervalSeconds}s, Total duration: \\${durationSeconds}s\n');
+    if (jsonMode) {
+      stdout.write('{"processing": [\n');
+    } else {
+      print('🔄 Starting periodic scan for: \\${serviceType}');
+      print(
+          '📅 Query interval: \\${intervalSeconds}s, Total duration: \\${durationSeconds}s\n');
+    }
     await mdnsFfi.startPeriodicScanJsonWithDone(
       serviceType,
       (json) {
@@ -144,9 +213,21 @@ Future<void> runPeriodicScan(
             port: json['port'] ?? 0,
             serviceType: json['type_name'] ?? '',
             txtRecords: Map<String, String>.from(json['txt'] ?? {}),
+            queryNumber: json['queryNumber'] ?? 0,
           ));
+          if (jsonMode) {
+            if (!first) stdout.write(',\n');
+            stdout.write(jsonEncode(json));
+            first = false;
+          }
         } else if (json['type'] == 'error') {
-          print('❌ Native error: \\${json['message']}');
+          if (jsonMode) {
+            if (!first) stdout.write(',\n');
+            stdout.write(jsonEncode(json));
+            first = false;
+          } else {
+            print('❌ Native error: \\${json['message']}');
+          }
         }
       },
       queryIntervalMs: intervalSeconds * 1000,
@@ -159,11 +240,21 @@ Future<void> runPeriodicScan(
       if (!mdnsFfi.isScanning()) break;
     }
     mdnsFfi.stopScan();
-    print('\n📋 Periodic Scan Results:');
-    print('Found \\${foundDevices.length} devices');
-    for (final device in foundDevices) {
-      print(
-          '  • \\${device.name} (\\${device.ip}:\\${device.port}) [Query #\\${device.queryNumber}]');
+    if (jsonMode) {
+      stdout.write('\n],\n"result": ');
+      stdout.write(jsonEncode({
+        'type': 'summary',
+        'count': foundDevices.length,
+        'devices': foundDevices.map((d) => d.toJson()).toList()
+      }));
+      stdout.write('}\n');
+    } else {
+      print('\n📋 Periodic Scan Results:');
+      print('Found \\${foundDevices.length} devices');
+      for (final device in foundDevices) {
+        print(
+            '  • \\${device.name} (\\${device.ip}:\\${device.port}) [Query #\\${device.queryNumber}]');
+      }
     }
   } finally {
     mdnsFfi.dispose();
@@ -171,36 +262,83 @@ Future<void> runPeriodicScan(
 }
 
 Future<void> runTimingAnalysis(List<String> serviceTypes,
-    {int timeoutSeconds = 15}) async {
+    {int timeoutSeconds = 15, bool jsonMode = false}) async {
   final mdnsFfi = NativeMdnsScanner();
-
+  if (jsonMode) mdnsFfi.setSilentMode(true);
+  final foundDevices = <DeviceInfo>[];
+  bool first = true;
   try {
-    print('📊 Starting timing analysis for ${serviceTypes.length} services:');
-    for (final service in serviceTypes) {
-      print('  • $service');
+    if (jsonMode) {
+      stdout.write('{"processing": [\n');
+    } else {
+      print(
+          '📊 Starting timing analysis for \\${serviceTypes.length} services:');
+      for (final service in serviceTypes) {
+        print('  • \\${service}');
+      }
+      print('⏱️ Timeout: \\${timeoutSeconds}s\n');
     }
-    print('⏱️ Timeout: ${timeoutSeconds}s\n');
-
-    final devices = await mdnsFfi.scanMultipleServices(
-      serviceTypes,
-      timeout: Duration(seconds: timeoutSeconds),
-    );
-
-    print('\n📋 Timing Analysis Results:');
-    TimingAnalyzer.analyzeTimings(devices);
-
-    final stats = TimingAnalyzer.getStatistics(devices);
-    print('\n📈 Summary Statistics:');
-    print('  Total devices: ${stats['totalDevices']}');
-    print('  Service types: ${stats['serviceTypes']}');
-    print('  Discovery span: ${stats['discoverySpanMs']}ms');
-    print('  Simultaneous discoveries: ${stats['simultaneousDiscoveries']}');
+    for (final serviceType in serviceTypes) {
+      mdnsFfi.startScanJson(serviceType, (json) {
+        if (json['type'] == 'device') {
+          foundDevices.add(DeviceInfo(
+            name: json['name'] ?? '',
+            ip: json['ip'] ?? '',
+            port: json['port'] ?? 0,
+            serviceType: json['type_name'] ?? '',
+            txtRecords: Map<String, String>.from(json['txt'] ?? {}),
+          ));
+          if (jsonMode) {
+            if (!first) stdout.write(',\n');
+            stdout.write(jsonEncode(json));
+            first = false;
+          }
+        } else if (json['type'] == 'error') {
+          if (jsonMode) {
+            if (!first) stdout.write(',\n');
+            stdout.write(jsonEncode(json));
+            first = false;
+          } else {
+            print('❌ Native error: \\${json['message']}');
+          }
+        }
+      }, debug: 0);
+      await Future.delayed(Duration(milliseconds: 200));
+    }
+    final startTime = DateTime.now();
+    while (DateTime.now().difference(startTime).inSeconds < timeoutSeconds) {
+      await Future.delayed(Duration(seconds: 1));
+      if (!mdnsFfi.isScanning()) break;
+    }
+    mdnsFfi.stopScan();
+    if (jsonMode) {
+      stdout.write('\n],\n"result": ');
+      stdout.write(jsonEncode({
+        'type': 'timing_summary',
+        ...TimingAnalyzer.getStatistics(foundDevices)
+      }));
+      stdout.write('}\n');
+    } else {
+      print('\n📋 Timing Analysis Results:');
+      TimingAnalyzer.analyzeTimings(foundDevices);
+      final stats = TimingAnalyzer.getStatistics(foundDevices);
+      print('\n📈 Summary Statistics:');
+      print('  Total devices: \\${stats['totalDevices']}');
+      print('  Service types: \\${stats['serviceTypes']}');
+      print('  Discovery span: \\${stats['discoverySpanMs']}ms');
+      print(
+          '  Simultaneous discoveries: \\${stats['simultaneousDiscoveries']}');
+    }
   } finally {
     mdnsFfi.dispose();
   }
 }
 
 void main(List<String> arguments) async {
+  if (arguments.contains('--json')) {
+    MdnsFfi.silentLibraryPrint = true;
+  }
+
   if (arguments.isEmpty ||
       arguments.contains('--help') ||
       arguments.contains('-h')) {
@@ -220,6 +358,7 @@ void main(List<String> arguments) async {
   int intervalSeconds = 5;
   int durationSeconds = 30;
   int debugLevel = 0;
+  bool jsonMode = arguments.contains('--json');
   final debugArg = arguments.firstWhere(
     (arg) => arg.startsWith('--debug'),
     orElse: () => '',
@@ -250,29 +389,33 @@ void main(List<String> arguments) async {
       case 'scan':
         if (arguments.length < 2) {
           print('❌ Service type required for scan command');
-          printUsage();
+          printUsage(jsonMode: jsonMode);
           exit(1);
         }
         await runSimpleScan(arguments[1],
-            timeoutSeconds: timeoutSeconds, debugLevel: debugLevel);
+            timeoutSeconds: timeoutSeconds,
+            debugLevel: debugLevel,
+            jsonMode: jsonMode);
         break;
 
       case 'multi':
         if (arguments.length < 2) {
           print('❌ At least one service type required for multi command');
-          printUsage();
+          printUsage(jsonMode: jsonMode);
           exit(1);
         }
         final services =
             arguments.skip(1).where((arg) => !arg.startsWith('--')).toList();
         await runMultiScan(services,
-            timeoutSeconds: timeoutSeconds, debugLevel: debugLevel);
+            timeoutSeconds: timeoutSeconds,
+            debugLevel: debugLevel,
+            jsonMode: jsonMode);
         break;
 
       case 'periodic':
         if (arguments.length < 2) {
           print('❌ Service type required for periodic command');
-          printUsage();
+          printUsage(jsonMode: jsonMode);
           exit(1);
         }
         await runPeriodicScan(
@@ -280,27 +423,33 @@ void main(List<String> arguments) async {
           intervalSeconds: intervalSeconds,
           durationSeconds: durationSeconds,
           debugLevel: debugLevel,
+          jsonMode: jsonMode,
         );
         break;
 
       case 'timing':
         if (arguments.length < 2) {
           print('❌ At least one service type required for timing command');
-          printUsage();
+          printUsage(jsonMode: jsonMode);
           exit(1);
         }
         final services =
             arguments.skip(1).where((arg) => !arg.startsWith('--')).toList();
-        await runTimingAnalysis(services, timeoutSeconds: timeoutSeconds);
+        await runTimingAnalysis(services,
+            timeoutSeconds: timeoutSeconds, jsonMode: jsonMode);
         break;
 
       default:
-        print('❌ Unknown command: $command');
-        printUsage();
+        if (!jsonMode) {
+          print('❌ Unknown command: $command');
+          printUsage(jsonMode: jsonMode);
+        }
         exit(1);
     }
   } catch (e) {
-    print('❌ Error: $e');
+    if (!jsonMode) {
+      print('❌ Error: $e');
+    }
     exit(1);
   }
 }

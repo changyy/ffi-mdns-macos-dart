@@ -27,7 +27,7 @@ Add this to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  native_mdns_scanner: ^1.0.0
+  native_mdns_scanner: ^1.4.0
 ```
 
 Or install directly from GitHub:
@@ -197,6 +197,19 @@ dart run bin/mdns_cli.dart timing _googlecast._tcp _airplay._tcp --timeout 20
 - `--interval <seconds>`: Query interval for periodic scan (default: 5)
 - `--duration <seconds>`: Total duration for periodic scan (default: 30)
 - `--help`, `-h`: Show help message
+
+### Command-Line Interface (CLI)
+
+The CLI tool supports scanning and timing analysis from the command line:
+
+```
+dart run bin/mdns_cli.dart scan _googlecast._tcp
+```
+
+#### JSON Output & Silent Mode
+
+- Use `--json` to output only valid JSON (one object per line). All non-JSON output is suppressed.
+- When `--json` is enabled, native log output is also fully suppressed (silent mode) for clean machine-readable output.
 
 ## Common Service Types
 

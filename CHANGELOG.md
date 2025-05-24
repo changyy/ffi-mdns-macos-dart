@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2025-05-24
+
+### Added
+- CLI `--json` mode now outputs a single valid JSON object, with a streaming `processing` array and a final `result` summary, suitable for direct pipeline and machine parsing.
+- All device and error events are streamed as array elements, enabling real-time consumption by downstream tools.
+
+### Changed
+- Native and Dart layers are now fully silent in `--json` mode, including library path detection messages and native logs.
+- CLI, API, and all examples updated to reflect the new JSON streaming output format.
+- Improved error handling in JSON mode: errors are included as objects in the `processing` array.
+
+### Fixed
+- Removed unnecessary imports and resolved analyzer warnings.
+- Fixed typo and stability issues in native code and Dart FFI integration.
+
+### Documentation
+- Updated README and example documentation to describe the new JSON output format and silent mode behavior.
+
 ## [1.3.0] - 2025-05-24
 
 ### Changed

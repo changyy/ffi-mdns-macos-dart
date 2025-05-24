@@ -28,6 +28,11 @@ static int totalActiveSearches = 0;
 
 // 新增 debug mode 全域變數
 static int globalDebugMode = 0;
+static int g_mdns_silent_mode = 0;
+
+void set_mdns_silent_mode(int silent) {
+    g_mdns_silent_mode = silent ? 1 : 0;
+}
 
 @interface MdnsDelegate : NSObject <NSNetServiceBrowserDelegate, NSNetServiceDelegate>
 @property (nonatomic, strong) NSString *serviceType;
@@ -41,7 +46,7 @@ static int globalDebugMode = 0;
     if (self) {
         _serviceType = serviceType;
         _queriesSent = 0;
-        NSLog(@"🔧 MdnsDelegate initialized for %@: %p", serviceType, self);
+        if (!g_mdns_silent_mode) NSLog(@"🔧 MdnsDelegate initialized for %@: %p", serviceType, self);
     }
     return self;
 }
@@ -50,13 +55,13 @@ static int globalDebugMode = 0;
 
 - (void)netServiceBrowserWillSearch:(NSNetServiceBrowser *)browser {
     self.queriesSent++;
-    NSLog(@"🔍 Query #%d: Browser searching for %@", self.queriesSent, self.serviceType);
+    if (!g_mdns_silent_mode) NSLog(@"🔍 Query #%d: Browser searching for %@", self.queriesSent, self.serviceType);
 }
 
 - (void)netServiceBrowser:(NSNetServiceBrowser *)browser 
            didFindService:(NSNetService *)service 
                moreComing:(BOOL)moreComing {
-    NSLog(@"✅ Found service: %@ (type: %@) via query #%d - moreComing: %@", 
+    if (!g_mdns_silent_mode) NSLog(@"✅ Found service: %@ (type: %@) via query #%d - moreComing: %@", 
           service.name, service.type, self.queriesSent, moreComing ? @"YES" : @"NO");
     
     // 找到對應的搜尋上下文
@@ -82,13 +87,13 @@ static int globalDebugMode = 0;
         
         if (!alreadyExists) {
             [context->services addObject:service];
-            NSLog(@"📊 New device added. Total for %@: %lu", 
+            if (!g_mdns_silent_mode) NSLog(@"📊 New device added. Total for %@: %lu", 
                   self.serviceType, (unsigned long)context->services.count);
             
             service.delegate = self;
             [service resolveWithTimeout:10.0];
         } else {
-            NSLog(@"🔄 Device %@ already known, skipping", service.name);
+            if (!g_mdns_silent_mode) NSLog(@"🔄 Device %@ already known, skipping", service.name);
         }
     }
 }
@@ -96,7 +101,7 @@ static int globalDebugMode = 0;
 - (void)netServiceBrowser:(NSNetServiceBrowser *)browser 
          didRemoveService:(NSNetService *)service 
                moreComing:(BOOL)moreComing {
-    NSLog(@"❌ Service removed: %@ (type: %@)", service.name, service.type);
+    if (!g_mdns_silent_mode) NSLog(@"❌ Service removed: %@ (type: %@)", service.name, service.type);
     
     // 從對應的服務列表中移除
     for (NSString *key in searchContexts.allKeys) {
@@ -110,11 +115,11 @@ static int globalDebugMode = 0;
 
 - (void)netServiceBrowser:(NSNetServiceBrowser *)browser 
              didNotSearch:(NSDictionary<NSString *,NSNumber *> *)errorDict {
-    NSLog(@"🚫 Search failed for %@ with error: %@", self.serviceType, errorDict);
+    if (!g_mdns_silent_mode) NSLog(@"🚫 Search failed for %@ with error: %@", self.serviceType, errorDict);
 }
 
 - (void)netServiceBrowserDidStopSearch:(NSNetServiceBrowser *)browser {
-    NSLog(@"🛑 Browser stopped searching for %@", self.serviceType);
+    if (!g_mdns_silent_mode) NSLog(@"🛑 Browser stopped searching for %@", self.serviceType);
 }
 
 #pragma mark - NSNetServiceDelegate
@@ -191,7 +196,7 @@ static int globalDebugMode = 0;
 // Run Loop 管理
 void startRunLoopProcessing() {
     if (!runLoopTimer && totalActiveSearches > 0) {
-        NSLog(@"🔄 Starting Run Loop processing for %d active searches...", totalActiveSearches);
+        if (!g_mdns_silent_mode) NSLog(@"🔄 Starting Run Loop processing for %d active searches...", totalActiveSearches);
         runLoopTimer = [NSTimer scheduledTimerWithTimeInterval:0.1
                                                        repeats:YES
                                                          block:^(NSTimer * _Nonnull timer) {
@@ -202,7 +207,7 @@ void startRunLoopProcessing() {
 
 void stopRunLoopProcessing() {
     if (runLoopTimer && totalActiveSearches == 0) {
-        NSLog(@"⏹️ Stopping Run Loop processing...");
+        if (!g_mdns_silent_mode) NSLog(@"⏹️ Stopping Run Loop processing...");
         [runLoopTimer invalidate];
         runLoopTimer = nil;
     }
@@ -211,7 +216,7 @@ void stopRunLoopProcessing() {
 // 定期查詢的回調函數
 void periodicQueryCallback(SearchContext *context) {
     if (context && context->browser) {
-        NSLog(@"🔄 Sending periodic query for %@ (interval: %dms)", 
+        if (!g_mdns_silent_mode) NSLog(@"🔄 Sending periodic query for %@ (interval: %dms)", 
               context->serviceType, context->queryIntervalMs);
         
         // 停止當前搜尋然後重新開始（這會觸發新的查詢）
@@ -227,7 +232,7 @@ void periodicQueryCallback(SearchContext *context) {
 // 搜尋結束的回調函數
 void searchDurationCallback(SearchContext *context) {
     if (context) {
-        NSLog(@"⏰ Search duration completed for %@ (sent %d queries)", 
+        if (!g_mdns_silent_mode) NSLog(@"⏰ Search duration completed for %@ (sent %d queries)", 
               context->serviceType, context->queriesSent);
         
         // 停止定期查詢定時器
@@ -255,7 +260,7 @@ void searchDurationCallback(SearchContext *context) {
             stopRunLoopProcessing();
         }
         
-        NSLog(@"🧹 Cleaned up search context for %@ (remaining active: %d)", 
+        if (!g_mdns_silent_mode) NSLog(@"🧹 Cleaned up search context for %@ (remaining active: %d)", 
               key, totalActiveSearches);
     }
 }
@@ -267,10 +272,12 @@ void start_mdns_periodic_scan(const char* service_type,
                              DeviceFoundCallback cb) {
     NSString *serviceTypeStr = [NSString stringWithUTF8String:service_type];
     
-    NSLog(@"🚀 start_mdns_periodic_scan called:");
-    NSLog(@"   Service: %s", service_type);
-    NSLog(@"   Query interval: %dms", query_interval_ms);
-    NSLog(@"   Total duration: %dms", total_duration_ms);
+    if (!g_mdns_silent_mode) {
+        NSLog(@"🚀 start_mdns_periodic_scan called:");
+        NSLog(@"   Service: %s", service_type);
+        NSLog(@"   Query interval: %dms", query_interval_ms);
+        NSLog(@"   Total duration: %dms", total_duration_ms);
+    }
     
     // 初始化字典
     if (!searchContexts) {
@@ -279,7 +286,7 @@ void start_mdns_periodic_scan(const char* service_type,
     
     // 檢查是否已經在搜尋這個服務
     if (searchContexts[serviceTypeStr]) {
-        NSLog(@"⏸️ Already scanning for service type: %s", service_type);
+        if (!g_mdns_silent_mode) NSLog(@"⏸️ Already scanning for service type: %s", service_type);
         return;
     }
     
@@ -305,7 +312,7 @@ void start_mdns_periodic_scan(const char* service_type,
     startRunLoopProcessing();
     
     // 開始初始搜尋
-    NSLog(@"🎬 Starting initial search for: %@", serviceTypeStr);
+    if (!g_mdns_silent_mode) NSLog(@"🎬 Starting initial search for: %@", serviceTypeStr);
     [context->browser searchForServicesOfType:serviceTypeStr inDomain:@"local."];
     
     // 設定定期查詢定時器
@@ -316,7 +323,7 @@ void start_mdns_periodic_scan(const char* service_type,
                                                                 block:^(NSTimer * _Nonnull timer) {
             periodicQueryCallback(context);
         }];
-        NSLog(@"⏰ Set up periodic query timer: every %.1fs", intervalSeconds);
+        if (!g_mdns_silent_mode) NSLog(@"⏰ Set up periodic query timer: every %.1fs", intervalSeconds);
     }
     
     // 設定總時間限制定時器
@@ -327,10 +334,10 @@ void start_mdns_periodic_scan(const char* service_type,
                                                                     block:^(NSTimer * _Nonnull timer) {
             searchDurationCallback(context);
         }];
-        NSLog(@"⏰ Set up duration timer: %.1fs total", durationSeconds);
+        if (!g_mdns_silent_mode) NSLog(@"⏰ Set up duration timer: %.1fs total", durationSeconds);
     }
     
-    NSLog(@"✅ Periodic search setup complete for: %@", serviceTypeStr);
+    if (!g_mdns_silent_mode) NSLog(@"✅ Periodic search setup complete for: %@", serviceTypeStr);
 }
 
 // 原有的簡單搜尋函數（保持向後相容）
@@ -393,7 +400,7 @@ void start_mdns_scan_json(const char* service_type, DeviceFoundJsonCallback cb, 
 }
 
 void stop_mdns_scan() {
-    NSLog(@"🛑 stop_mdns_scan called - stopping ALL scans");
+    if (!g_mdns_silent_mode) NSLog(@"🛑 stop_mdns_scan called - stopping ALL scans");
     
     // 停止所有搜尋上下文
     for (NSString *serviceType in searchContexts.allKeys) {
@@ -410,7 +417,7 @@ void stop_mdns_scan() {
         }
         
         free(context);
-        NSLog(@"🛑 Stopped scan for: %@", serviceType);
+        if (!g_mdns_silent_mode) NSLog(@"🛑 Stopped scan for: %@", serviceType);
     }
     
     [searchContexts removeAllObjects];
@@ -423,7 +430,7 @@ void stop_mdns_scan() {
         globalCallback = NULL;
     }
     
-    NSLog(@"✅ All periodic scans stopped");
+    if (!g_mdns_silent_mode) NSLog(@"✅ All periodic scans stopped");
 }
 
 void process_mdns_events() {

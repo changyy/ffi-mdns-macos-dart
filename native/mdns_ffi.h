@@ -46,4 +46,6 @@ void process_mdns_events(void);
 int is_mdns_scanning(void);
 int get_found_services_count(void);
 
+void set_mdns_silent_mode(int silent);
+
 #endif // MDNS_FFI_H
