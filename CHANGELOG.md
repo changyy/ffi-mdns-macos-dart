@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-05-24
+
+### Changed
+- Removed all deprecated periodic scan APIs: `startPeriodicScanJson` and `startPeriodicScan` are no longer available. All code must use the new `startPeriodicScanJsonWithDone` and `startPeriodicScanWithDone` APIs.
+- Updated all examples, CLI tools, and tests to use only the new periodic scan APIs with async/await and onDone callback support.
+- Modernized all documentation and code samples in README and example files to reflect the new API usage exclusively.
+- Improved API consistency and usability by eliminating legacy methods and ensuring all public interfaces are up-to-date.
+- Synchronized all documentation, code comments, and usage instructions to match the latest API and best practices.
+
 ## [1.2.0] - 2025-05-24
 
 ### Added

@@ -324,34 +324,6 @@ class MdnsFfi {
     calloc.free(serviceTypePtr);
   }
 
-  /// Start periodic scanning for a specific service type
-  ///
-  /// [serviceType] should be in the format '_service._tcp'
-  /// [queryIntervalMs] interval between queries in milliseconds (0 = no periodic queries)
-  /// [totalDurationMs] total scan duration in milliseconds (0 = infinite)
-  void startPeriodicScan(
-    String serviceType, {
-    int queryIntervalMs = 0,
-    int totalDurationMs = 0,
-  }) {
-    final serviceTypePtr = serviceType.toNativeUtf8();
-    _dartDeviceFoundCallback = _onDeviceFound;
-    final cbPtr = Pointer.fromFunction<DeviceFoundCallbackNative>(
-      _ffiDeviceFoundCallback,
-    );
-
-    if (debugLevel >= 2) {
-      print(
-          '🚀 Starting periodic scan for: $serviceType (interval: \\${queryIntervalMs}ms, duration: \\${totalDurationMs}ms)');
-    }
-    _startPeriodicScan(serviceTypePtr, queryIntervalMs, totalDurationMs, cbPtr);
-
-    // 啟動事件處理定時器（如果還沒啟動）
-    _startEventProcessing();
-
-    calloc.free(serviceTypePtr);
-  }
-
   void startScanJson(
       String serviceType, void Function(Map<String, dynamic>) onJson,
       {int debug = 1}) {
@@ -380,9 +352,15 @@ class MdnsFfi {
     calloc.free(serviceTypePtr);
   }
 
-  void startPeriodicScanJson(
-      String serviceType, void Function(Map<String, dynamic>) onJson,
-      {int queryIntervalMs = 0, int totalDurationMs = 0, int debug = 1}) {
+  /// 新版：支援 onDone callback 的 periodic scan (JSON callback)
+  Future<void> startPeriodicScanJsonWithDone(
+    String serviceType,
+    void Function(Map<String, dynamic>) onJson, {
+    int queryIntervalMs = 0,
+    int totalDurationMs = 0,
+    int debug = 1,
+    void Function()? onDone,
+  }) async {
     _singleton = this;
     final serviceTypePtr = serviceType.toNativeUtf8();
     _dartDeviceFoundJsonCallback = (Pointer<Utf8> jsonStrPtr) {
@@ -407,6 +385,37 @@ class MdnsFfi {
     }
     _startEventProcessing();
     calloc.free(serviceTypePtr);
+    if (totalDurationMs > 0) {
+      await Future.delayed(Duration(milliseconds: totalDurationMs));
+      stopScan();
+      if (onDone != null) onDone();
+    }
+  }
+
+  /// 新版：支援 onDone callback 的 periodic scan (native callback)
+  Future<void> startPeriodicScanWithDone(
+    String serviceType, {
+    int queryIntervalMs = 0,
+    int totalDurationMs = 0,
+    void Function()? onDone,
+  }) async {
+    final serviceTypePtr = serviceType.toNativeUtf8();
+    _dartDeviceFoundCallback = _onDeviceFound;
+    final cbPtr = Pointer.fromFunction<DeviceFoundCallbackNative>(
+      _ffiDeviceFoundCallback,
+    );
+    if (debugLevel >= 2) {
+      print(
+          '🚀 Starting periodic scan for: $serviceType (interval: \\${queryIntervalMs}ms, duration: \\${totalDurationMs}ms)');
+    }
+    _startPeriodicScan(serviceTypePtr, queryIntervalMs, totalDurationMs, cbPtr);
+    _startEventProcessing();
+    calloc.free(serviceTypePtr);
+    if (totalDurationMs > 0) {
+      await Future.delayed(Duration(milliseconds: totalDurationMs));
+      stopScan();
+      if (onDone != null) onDone();
+    }
   }
 
   /// Stop all active scans
@@ -505,7 +514,7 @@ class MdnsFfi {
     final queryIntervalMs = queryInterval.inMilliseconds;
     final totalDurationMs = timeout.inMilliseconds;
     for (String serviceType in serviceTypes) {
-      startPeriodicScan(
+      await startPeriodicScanWithDone(
         serviceType,
         queryIntervalMs: queryIntervalMs,
         totalDurationMs: totalDurationMs,

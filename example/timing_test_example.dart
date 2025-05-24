@@ -50,20 +50,26 @@ void main() async {
     print('📅 Query every 5 seconds for 20 seconds total\n');
     foundDevices2.clear();
     for (final type in serviceTypes) {
-      mdnsFfi.startPeriodicScanJson(type, (json) {
-        if (json['type'] == 'device') {
-          foundDevices2.add(DeviceInfo(
-            name: json['name'] ?? '',
-            ip: json['ip'] ?? '',
-            port: json['port'] ?? 0,
-            serviceType: json['type_name'] ?? '',
-            txtRecords: Map<String, String>.from(json['txt'] ?? {}),
-            queryNumber: json['queryNumber'] ?? 0,
-          ));
-        } else if (json['type'] == 'error') {
-          print('❌ Native error: \\${json['message']}');
-        }
-      }, queryIntervalMs: 5000, totalDurationMs: 20000, debug: debugLevel);
+      await mdnsFfi.startPeriodicScanJsonWithDone(
+        type,
+        (json) {
+          if (json['type'] == 'device') {
+            foundDevices2.add(DeviceInfo(
+              name: json['name'] ?? '',
+              ip: json['ip'] ?? '',
+              port: json['port'] ?? 0,
+              serviceType: json['type_name'] ?? '',
+              txtRecords: Map<String, String>.from(json['txt'] ?? {}),
+              queryNumber: json['queryNumber'] ?? 0,
+            ));
+          } else if (json['type'] == 'error') {
+            print('❌ Native error: \\${json['message']}');
+          }
+        },
+        queryIntervalMs: 5000,
+        totalDurationMs: 20000,
+        debug: debugLevel,
+      );
       await Future.delayed(Duration(milliseconds: 300));
     }
     await Future.delayed(Duration(seconds: 20));

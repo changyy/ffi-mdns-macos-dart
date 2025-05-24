@@ -302,6 +302,50 @@ void main() {
     }, skip: !Platform.isMacOS ? 'macOS only' : null);
   });
 
+  group('MdnsFfi periodic scan API', () {
+    test('startPeriodicScanJsonWithDone triggers onDone after duration',
+        () async {
+      if (!Platform.isMacOS) return;
+      final scanner = NativeMdnsScanner(debugLevel: 0);
+      final found = <DeviceInfo>[];
+      var doneCalled = false;
+      await scanner.startPeriodicScanJsonWithDone(
+        '_test._tcp',
+        (json) {
+          if (json['type'] == 'device') {
+            found.add(DeviceInfo(
+              name: json['name'] ?? '',
+              ip: json['ip'] ?? '',
+              port: json['port'] ?? 0,
+              serviceType: json['type_name'] ?? '',
+              txtRecords: Map<String, String>.from(json['txt'] ?? {}),
+              queryNumber: json['queryNumber'] ?? 0,
+            ));
+          }
+        },
+        queryIntervalMs: 1000,
+        totalDurationMs: 1500,
+        onDone: () => doneCalled = true,
+      );
+      expect(doneCalled, isTrue);
+      scanner.dispose();
+    });
+
+    test('startPeriodicScanWithDone triggers onDone after duration', () async {
+      if (!Platform.isMacOS) return;
+      final scanner = NativeMdnsScanner(debugLevel: 0);
+      var doneCalled = false;
+      await scanner.startPeriodicScanWithDone(
+        '_test._tcp',
+        queryIntervalMs: 1000,
+        totalDurationMs: 1200,
+        onDone: () => doneCalled = true,
+      );
+      expect(doneCalled, isTrue);
+      scanner.dispose();
+    });
+  });
+
   group('Service Type Validation', () {
     test('should handle common service types', () {
       final commonServices = [

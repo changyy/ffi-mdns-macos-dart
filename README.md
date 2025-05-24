@@ -47,24 +47,20 @@ dependencies:
 import 'package:native_mdns_scanner/native_mdns_scanner.dart';
 
 void main() async {
-  final mdnsFfi = MdnsFfi();
-  
+  final scanner = NativeMdnsScanner();
   try {
     // Scan for Chromecast devices
-    mdnsFfi.startScan('_googlecast._tcp');
-    
+    scanner.startScan('_googlecast._tcp');
     // Wait for 10 seconds
     await Future.delayed(Duration(seconds: 10));
-    
-    mdnsFfi.stopScan();
-    
+    scanner.stopScan();
     // Get results
-    final devices = mdnsFfi.foundDevices;
+    final devices = scanner.foundDevices;
     for (final device in devices) {
-      print('Found: ${device.name} at ${device.ip}:${device.port}');
+      print('Found: \\${device.name} at \\${device.ip}:\\${device.port}');
     }
   } finally {
-    mdnsFfi.dispose();
+    scanner.dispose();
   }
 }
 ```
@@ -72,46 +68,99 @@ void main() async {
 ### Simultaneous Multi-Service Scanning
 
 ```dart
-final mdnsFfi = MdnsFfi();
+final scanner = NativeMdnsScanner();
 
 try {
-  final devices = await mdnsFfi.scanMultipleServices([
+  final devices = await scanner.scanMultipleServices([
     '_googlecast._tcp',  // Chromecast
     '_airplay._tcp',     // AirPlay
     '_raop._tcp',        // Remote Audio Output Protocol
   ], timeout: Duration(seconds: 15));
-  
-  print('Found ${devices.length} devices');
-  
+  print('Found \\${devices.length} devices');
   // Group by service type
-  final devicesByType = mdnsFfi.getDevicesByServiceType();
+  final devicesByType = scanner.getDevicesByServiceType();
   for (final serviceType in devicesByType.keys) {
     final typeDevices = devicesByType[serviceType]!;
-    print('$serviceType: ${typeDevices.length} devices');
+    print('\\${serviceType}: \\${typeDevices.length} devices');
   }
 } finally {
-  mdnsFfi.dispose();
+  scanner.dispose();
 }
 ```
 
 ### Periodic Scanning
 
 ```dart
-final mdnsFfi = MdnsFfi();
+final scanner = NativeMdnsScanner();
 
 try {
-  final devices = await mdnsFfi.scanMultipleServicesWithPeriodic([
+  final devices = await scanner.scanMultipleServicesWithPeriodic([
     '_googlecast._tcp',
   ],
     timeout: Duration(seconds: 30),      // Total scan time
     queryInterval: Duration(seconds: 5), // Query every 5 seconds
   );
-  
   // Analyze timing patterns
   TimingAnalyzer.analyzeTimings(devices);
 } finally {
-  mdnsFfi.dispose();
+  scanner.dispose();
 }
+```
+
+## Event Callback & Custom Scan Duration
+
+You can receive device events in real time using the JSON callback interface. This is useful for UI updates or streaming results as they arrive.
+
+### Using startScanJson
+
+```dart
+final scanner = NativeMdnsScanner();
+final foundDevices = <DeviceInfo>[];
+scanner.startScanJson('_googlecast._tcp', (json) {
+  if (json['type'] == 'device') {
+    foundDevices.add(DeviceInfo(
+      name: json['name'] ?? '',
+      ip: json['ip'] ?? '',
+      port: json['port'] ?? 0,
+      serviceType: json['type_name'] ?? '',
+      txtRecords: Map<String, String>.from(json['txt'] ?? {}),
+    ));
+    print('Found device: \\${json['name']} at \\${json['ip']}:\\${json['port']}');
+  } else if (json['type'] == 'error') {
+    print('Error: \\${json['message']}');
+  }
+}, debug: 2);
+// Wait for 10 seconds
+await Future.delayed(Duration(seconds: 10));
+scanner.stopScan();
+```
+
+### Using startPeriodicScanJsonWithDone (recommended new usage)
+
+```dart
+final scanner = NativeMdnsScanner();
+final foundDevices = <DeviceInfo>[];
+await scanner.startPeriodicScanJsonWithDone(
+  '_googlecast._tcp',
+  (json) {
+    if (json['type'] == 'device') {
+      foundDevices.add(DeviceInfo(
+        name: json['name'] ?? '',
+        ip: json['ip'] ?? '',
+        port: json['port'] ?? 0,
+        serviceType: json['type_name'] ?? '',
+        txtRecords: Map<String, String>.from(json['txt'] ?? {}),
+        queryNumber: json['queryNumber'] ?? 0,
+      ));
+      print('Found device: \\${json['name']} (query #\\${json['queryNumber']})');
+    } else if (json['type'] == 'error') {
+      print('Error: \\${json['message']}');
+    }
+  },
+  queryIntervalMs: 3000, // Query every 3 seconds
+  totalDurationMs: 12000, // Run for 12 seconds
+  debug: 2,
+);
 ```
 
 ## CLI Tool
@@ -165,7 +214,7 @@ dart run bin/mdns_cli.dart timing _googlecast._tcp _airplay._tcp --timeout 20
 
 ### MdnsFfi Class
 
-The main class for mDNS operations.
+The main class for mDNS operations is now recommended to be used as `NativeMdnsScanner` (a type alias for `MdnsFfi`).
 
 #### Methods
 
@@ -280,7 +329,7 @@ Enable verbose logging by setting debug flags in your code:
 
 ```dart
 // This will print detailed discovery information
-final mdnsFfi = MdnsFfi();
+final scanner = NativeMdnsScanner(debugLevel: 2); // 0=quiet, 1=error/result, 2=normal, 3=verbose
 // Logs are automatically printed to console
 ```
 

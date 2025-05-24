@@ -134,22 +134,25 @@ Future<void> runPeriodicScan(
     print('🔄 Starting periodic scan for: \\${serviceType}');
     print(
         '📅 Query interval: \\${intervalSeconds}s, Total duration: \\${durationSeconds}s\n');
-    mdnsFfi.startPeriodicScanJson(serviceType, (json) {
-      if (json['type'] == 'device') {
-        foundDevices.add(DeviceInfo(
-          name: json['name'] ?? '',
-          ip: json['ip'] ?? '',
-          port: json['port'] ?? 0,
-          serviceType: json['type_name'] ?? '',
-          txtRecords: Map<String, String>.from(json['txt'] ?? {}),
-        ));
-      } else if (json['type'] == 'error') {
-        print('❌ Native error: \\${json['message']}');
-      }
-    },
-        queryIntervalMs: intervalSeconds * 1000,
-        totalDurationMs: durationSeconds * 1000,
-        debug: debugLevel);
+    await mdnsFfi.startPeriodicScanJsonWithDone(
+      serviceType,
+      (json) {
+        if (json['type'] == 'device') {
+          foundDevices.add(DeviceInfo(
+            name: json['name'] ?? '',
+            ip: json['ip'] ?? '',
+            port: json['port'] ?? 0,
+            serviceType: json['type_name'] ?? '',
+            txtRecords: Map<String, String>.from(json['txt'] ?? {}),
+          ));
+        } else if (json['type'] == 'error') {
+          print('❌ Native error: \\${json['message']}');
+        }
+      },
+      queryIntervalMs: intervalSeconds * 1000,
+      totalDurationMs: durationSeconds * 1000,
+      debug: debugLevel,
+    );
     final startTime = DateTime.now();
     while (DateTime.now().difference(startTime).inSeconds < durationSeconds) {
       await Future.delayed(Duration(seconds: 1));
